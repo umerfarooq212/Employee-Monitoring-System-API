@@ -1,20 +1,24 @@
-﻿using Employee_Monitoring_System_API.Data;
-using Employee_Monitoring_System_API.Repository.IRepository;
+﻿using Employee_Monitoring_System_API;
+using Employee_Monitoring_System_API.Data;
 using Employee_Monitoring_System_API.Repository;
-using Microsoft.EntityFrameworkCore;
-using Employee_Monitoring_System_API;
+using Employee_Monitoring_System_API.Repository.IRepository;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using System.Text;
-using Microsoft.OpenApi.Models;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// ===== Add services to the container =====
+
+// JWT Configuration
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var key = Encoding.UTF8.GetBytes(jwtSettings["Secret"]);
+
 builder.Services.AddScoped<JwtService>();
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -30,6 +34,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+// Authorization Policies
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminPolicy", policy => policy.RequireRole("Admin"));
@@ -37,13 +42,13 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("EmployeePolicy", policy => policy.RequireRole("Employee", "TeamLead", "Admin"));
 });
 
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+// Swagger/OpenAPI
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Employee Monitoring System API", Version = "v1" });
 
-    // 🔑 Add JWT Authentication Support
+    // JWT Authentication in Swagger
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         In = ParameterLocation.Header,
@@ -64,21 +69,27 @@ builder.Services.AddSwaggerGen(c =>
                     Id = "Bearer"
                 }
             },
-            new string[] {}
+            Array.Empty<string>()
         }
     });
 
+    // File upload support
     var fileUploadSchema = new OpenApiSchema
     {
         Type = "string",
         Format = "binary"
     };
-
     c.MapType<IFormFile>(() => fileUploadSchema);
-
     c.OperationFilter<SwaggerFileOperationFilter>();
 });
-builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// ===== Database =====
+// Make sure you have installed Microsoft.EntityFrameworkCore.SqlServer
+// ===== Database =====
+// ===== Database =====
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+// ===== Repositories =====
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<ITaskRepository, TaskRepository>();
 builder.Services.AddScoped<IProjectRepository, ProjectRepository>();
@@ -89,17 +100,27 @@ builder.Services.AddScoped<IBranchRepository, BranchRepository>();
 builder.Services.AddScoped<IActivityRepository, ActivityRepository>();
 builder.Services.AddScoped<IAppsettingRepository, AppsettingRepository>();
 builder.Services.AddScoped<IHolidayRepository, HolidayRepository>();
+
+// AutoMapper
 builder.Services.AddAutoMapper(typeof(MappingProfile));
-builder.Services.Configure<FormOptions>(options => {
-    options.MultipartBodyLengthLimit = 104857600; // 100 MB limit
+
+// File upload size limit
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = 104_857_600; // 100 MB
 });
+
+// Environment
 builder.Services.AddSingleton<IWebHostEnvironment>(builder.Environment);
+
+// Controllers
 builder.Services.AddControllers().AddNewtonsoftJson();
 
 var app = builder.Build();
+
 app.UseStaticFiles();
 
-// Configure the HTTP request pipeline.
+// ===== HTTP pipeline =====
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -110,5 +131,7 @@ app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
+
 app.Run();
